@@ -65,7 +65,8 @@ spotless {
             exclude 'src/generated/**/*.java'
         }
         importOrder(['static java', 'static javax', 'static org', 'static com', 'static scala', 'java', 'javax', 'org', 'com', 'scala'])
-        removeUnusedImports()
+        // Disabled with Java 9+: https://github.com/diffplug/spotless/issues/83
+        //removeUnusedImports()
         eclipse().configFile 'config/format/code_format.xml'
     }
 }
