@@ -173,3 +173,183 @@ javadoc {
     options.addBooleanOption('html5', true)
 }
 ```
+
+## Modules need to be passed in to the module-path
+
+### Link
+
+https://guides.gradle.org/building-java-9-modules/#modify_the_code_compilejava_code_task_to_produce_a_module
+
+### Resolution
+
+In `build.gradle` add:
+
+```groovy
+compileJava {
+    inputs.property("moduleName", moduleName)
+    doFirst {
+        options.compilerArgs = [
+            '--module-path', classpath.asPath,
+        ]
+        classpath = files()
+    }
+}
+```
+
+In `quality.gradle` add:
+```groovy
+compileTestJava {
+    inputs.property("moduleName", moduleName)
+    doFirst {
+        options.compilerArgs = [
+            '--module-path', classpath.asPath,
+            '--add-modules', 'junit',  
+            '--add-reads', "$moduleName=junit",
+            '--patch-module', "$moduleName=" + files(sourceSets.test.java.srcDirs).asPath,
+        ]
+        classpath = files()
+    }
+}
+
+test
+{
+    inputs.property("moduleName", moduleName)
+    doFirst {
+        jvmArgs = [
+            '--module-path', classpath.asPath,
+            '--add-modules', 'ALL-MODULE-PATH',
+            '--add-reads', "$moduleName=junit",
+            '--patch-module', "$moduleName=" + files(sourceSets.test.java.outputDir).asPath,
+        ]
+        classpath = files()
+    }
+...
+}
+```
+
+## Package Exports
+
+All the packages need to be exported, one by one in `module-info.java`
+
+### Resolution
+
+:(
+
+## Split packages
+
+This is an issue that arises when two modules ship with the same package names. This is not allowed.
+
+### Symptom
+
+```bash
+> Task :compileJava
+error: the unnamed module reads package org.geotools.factory from both gt.metadata and gt.api
+error: the unnamed module reads package org.geotools.util from both gt.metadata and gt.api
+error: the unnamed module reads package org.geotools.data from both gt.api and gt.data
+error: the unnamed module reads package org.geotools.data from both gt.api and gt.main
+error: the unnamed module reads package org.geotools.data.memory from both gt.data and gt.main
+error: the unnamed module reads package org.geotools.data.simple from both gt.api and gt.main
+error: the unnamed module reads package org.geotools.data.store from both gt.data and gt.main
+error: the unnamed module reads package org.geotools.factory from both gt.metadata and gt.main
+error: the unnamed module reads package org.geotools.util from both gt.metadata and gt.main
+error: the unnamed module reads package org.geotools.feature from both gt.api and gt.main
+error: the unnamed module reads package org.geotools.feature.collection from both gt.api and gt.main
+error: the unnamed module reads package org.geotools.geometry.jts from both gt.api and gt.main
+error: the unnamed module reads package org.geotools.styling from both gt.api and gt.main
+error: the unnamed module reads package org.geotools.xml from both gt.metadata and gt.main
+error: the unnamed module reads package org.geotools.filter from both gt.api and gt.main
+error: the unnamed module reads package org.geotools.filter.expression from both gt.api and gt.main
+error: the unnamed module reads package org.geotools.resources from both gt.metadata and gt.referencing
+error: the unnamed module reads package org.geotools.metadata.iso.spatial from both gt.metadata and gt.referencing
+error: the unnamed module reads package org.geotools.geometry from both gt.api and gt.referencing
+error: module junit reads package org.geotools.factory from both gt.metadata and gt.api
+error: module junit reads package org.geotools.util from both gt.metadata and gt.api
+error: module junit reads package org.geotools.data from both gt.api and gt.data
+error: module junit reads package org.geotools.data from both gt.api and gt.main
+error: module junit reads package org.geotools.data.memory from both gt.data and gt.main
+error: module junit reads package org.geotools.data.simple from both gt.api and gt.main
+error: module junit reads package org.geotools.data.store from both gt.data and gt.main
+error: module junit reads package org.geotools.factory from both gt.metadata and gt.main
+error: module junit reads package org.geotools.util from both gt.metadata and gt.main
+error: module junit reads package org.geotools.feature from both gt.api and gt.main
+error: module junit reads package org.geotools.feature.collection from both gt.api and gt.main
+error: module junit reads package org.geotools.geometry.jts from both gt.api and gt.main
+error: module junit reads package org.geotools.styling from both gt.api and gt.main
+error: module junit reads package org.geotools.xml from both gt.metadata and gt.main
+error: module junit reads package org.geotools.filter from both gt.api and gt.main
+error: module junit reads package org.geotools.filter.expression from both gt.api and gt.main
+error: module junit reads package org.geotools.resources from both gt.metadata and gt.referencing
+error: module junit reads package org.geotools.metadata.iso.spatial from both gt.metadata and gt.referencing
+error: module junit reads package org.geotools.geometry from both gt.api and gt.referencing
+error: module opencsv reads package org.geotools.factory from both gt.metadata and gt.api
+error: module opencsv reads package org.geotools.util from both gt.metadata and gt.api
+error: module opencsv reads package org.geotools.data from both gt.api and gt.data
+error: module opencsv reads package org.geotools.data from both gt.api and gt.main
+error: module opencsv reads package org.geotools.data.memory from both gt.data and gt.main
+error: module opencsv reads package org.geotools.data.simple from both gt.api and gt.main
+error: module opencsv reads package org.geotools.data.store from both gt.data and gt.main
+error: module opencsv reads package org.geotools.factory from both gt.metadata and gt.main
+error: module opencsv reads package org.geotools.util from both gt.metadata and gt.main
+error: module opencsv reads package org.geotools.feature from both gt.api and gt.main
+error: module opencsv reads package org.geotools.feature.collection from both gt.api and gt.main
+error: module opencsv reads package org.geotools.geometry.jts from both gt.api and gt.main
+error: module opencsv reads package org.geotools.styling from both gt.api and gt.main
+error: module opencsv reads package org.geotools.xml from both gt.metadata and gt.main
+error: module opencsv reads package org.geotools.filter from both gt.api and gt.main
+error: module opencsv reads package org.geotools.filter.expression from both gt.api and gt.main
+error: module opencsv reads package org.geotools.resources from both gt.metadata and gt.referencing
+error: module opencsv reads package org.geotools.metadata.iso.spatial from both gt.metadata and gt.referencing
+error: module opencsv reads package org.geotools.geometry from both gt.api and gt.referencing
+error: module gson reads package org.geotools.factory from both gt.metadata and gt.api
+error: module gson reads package org.geotools.util from both gt.metadata and gt.api
+error: module gson reads package org.geotools.data from both gt.api and gt.data
+error: module gson reads package org.geotools.data from both gt.api and gt.main
+error: module gson reads package org.geotools.data.memory from both gt.data and gt.main
+error: module gson reads package org.geotools.data.simple from both gt.api and gt.main
+error: module gson reads package org.geotools.data.store from both gt.data and gt.main
+error: module gson reads package org.geotools.factory from both gt.metadata and gt.main
+error: module gson reads package org.geotools.util from both gt.metadata and gt.main
+error: module gson reads package org.geotools.feature from both gt.api and gt.main
+error: module gson reads package org.geotools.feature.collection from both gt.api and gt.main
+error: module gson reads package org.geotools.geometry.jts from both gt.api and gt.main
+error: module gson reads package org.geotools.styling from both gt.api and gt.main
+error: module gson reads package org.geotools.xml from both gt.metadata and gt.main
+error: module gson reads package org.geotools.filter from both gt.api and gt.main
+error: module gson reads package org.geotools.filter.expression from both gt.api and gt.main
+error: module gson reads package org.geotools.resources from both gt.metadata and gt.referencing
+error: module gson reads package org.geotools.metadata.iso.spatial from both gt.metadata and gt.referencing
+error: module gson reads package org.geotools.geometry from both gt.api and gt.referencing
+error: module commons.math3 reads package org.geotools.factory from both gt.metadata and gt.api
+error: module commons.math3 reads package org.geotools.util from both gt.metadata and gt.api
+error: module commons.math3 reads package org.geotools.data from both gt.api and gt.data
+error: module commons.math3 reads package org.geotools.data from both gt.api and gt.main
+error: module commons.math3 reads package org.geotools.data.memory from both gt.data and gt.main
+error: module commons.math3 reads package org.geotools.data.simple from both gt.api and gt.main
+error: module commons.math3 reads package org.geotools.data.store from both gt.data and gt.main
+error: module commons.math3 reads package org.geotools.factory from both gt.metadata and gt.main
+error: module commons.math3 reads package org.geotools.util from both gt.metadata and gt.main
+error: module commons.math3 reads package org.geotools.feature from both gt.api and gt.main
+error: module commons.math3 reads package org.geotools.feature.collection from both gt.api and gt.main
+error: module commons.math3 reads package org.geotools.geometry.jts from both gt.api and gt.main
+error: module commons.math3 reads package org.geotools.styling from both gt.api and gt.main
+error: module commons.math3 reads package org.geotools.xml from both gt.metadata and gt.main
+error: module commons.math3 reads package org.geotools.filter from both gt.api and gt.main
+error: module commons.math3 reads package org.geotools.filter.expression from both gt.api and gt.main
+error: module commons.math3 reads package org.geotools.resources from both gt.metadata and gt.referencing
+error: module commons.math3 reads package org.geotools.metadata.iso.spatial from both gt.metadata and gt.referencing
+error: module commons.math3 reads package org.geotools.geometry from both gt.api and gt.referencing
+error: module httpclient reads package org.geotools.factory from both gt.metadata and gt.api
+error: module httpclient reads package org.geotools.util from both gt.metadata and gt.api
+error: module httpclient reads package org.geotools.data from both gt.api and gt.data
+error: module httpclient reads package org.geotools.data from both gt.api and gt.main
+error: module httpclient reads package org.geotools.data.memory from both gt.data and gt.main
+100 errors
+
+> Task :compileJava FAILED
+```
+
+### Link
+
+https://stackoverflow.com/questions/42358084/package-conflicts-with-automatic-modules-in-java-9
+
+### Resolution

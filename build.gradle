@@ -29,6 +29,16 @@ repositories
     mavenCentral()
 }
 
+compileJava {
+    inputs.property("moduleName", moduleName)
+    doFirst {
+        options.compilerArgs = [
+            '--module-path', classpath.asPath,
+        ]
+        classpath = files()
+    }
+}
+
 configurations
 {
     shaded
@@ -117,6 +127,6 @@ gradle.startParameter.excludedTaskNames += skippedTaskNames
 
 idea {
     project {
-        languageLevel = '1.8'
+        languageLevel = '10'
     }
 }
