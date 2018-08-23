@@ -353,3 +353,23 @@ error: module httpclient reads package org.geotools.data.memory from both gt.dat
 https://stackoverflow.com/questions/42358084/package-conflicts-with-automatic-modules-in-java-9
 
 ### Resolution
+
+N/A
+
+## Package accessible from more than one module
+
+### Symptom
+
+A module is requiring a package, but another non-modular jar (or automatic module) is also containing that package.
+
+```
+The package org.slf4j is accessible from more than one module:
+```
+
+### Link
+
+https://stackoverflow.com/questions/50787235/combination-of-module-path-and-class-path-with-gradle
+
+### Resolution
+
+N/A

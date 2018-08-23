@@ -50,7 +50,6 @@ dependencies
     compile packages.junit
     compile packages.opencsv
     compile packages.gson
-    compile packages.math
     compile packages.http
     compile packages.jts
     compile packages.geotools
@@ -62,12 +61,13 @@ dependencies
     compile packages.commons.cli
     compile packages.commons.csv
     compile packages.commons.lang
-    compile packages.fastclasspath
+    compile packages.commons.math
+    compile packages.classgraph
     compile packages.guava
     compile packages.jsonassert
     compile packages.jackson.core
     compile packages.jackson.databind
-    compile packages.protobuf_java
+    compile packages.protobuf
     compile packages.protoc
 
     shaded project.configurations.getByName('compile')
