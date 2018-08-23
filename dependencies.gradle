@@ -39,7 +39,6 @@ project.ext.packages = [
         pbf: "org.openstreetmap.osmosis:osmosis-pbf:${versions.osmosis}",
         xml: "org.openstreetmap.osmosis:osmosis-xml:${versions.osmosis}",
         hstore:"org.openstreetmap.osmosis:osmosis-hstore-jdbc:${versions.osmosis}",
-        pg:"org.openstreetmap.osmosis:osmosis-pgsnapshot:${versions.osmosis}",
     ],
     commons:[
             io: "commons-io:commons-io:${versions.commons_io}",
