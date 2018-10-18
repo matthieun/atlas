@@ -33,7 +33,7 @@ JVM:          11.0.1 (Oracle Corporation 11.0.1+13-LTS)
 OS:           Mac OS X 10.14.1 x86_64
 ```
 
-## Eclipse has issues with building with source version 11
+## Eclipse 4.9 has issues with building with source version 11
 
 ### Symptom
 
@@ -43,3 +43,6 @@ Eclipse cannot build
 
 Install buildship 2.2.2
 http://download.eclipse.org/buildship/updates/e48/releases/2.x/2.2.2.v20181003-1024
+
+Install Java 11 support:
+https://marketplace.eclipse.org/content/java-11-support-eclipse-2018-09-49

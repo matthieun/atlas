@@ -19,8 +19,8 @@ apply from: 'gradle/deployment.gradle'
 
 description = "Atlas Library"
 
-sourceCompatibility=10
-targetCompatibility=10
+sourceCompatibility=11
+targetCompatibility=11
 
 repositories
 {
