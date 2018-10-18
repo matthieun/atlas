@@ -7,7 +7,7 @@ project.ext.versions = [
     gson: '2.8.5',
     math: '3.6.1',
     http: '4.5.6',
-    jts: '1.14.0',
+    jts: '1.16.0',
     geotools: '19.2',
     osmosis: '0.46',
     commons_io: '2.6',
@@ -32,7 +32,7 @@ project.ext.packages = [
     opencsv: "com.opencsv:opencsv:${versions.opencsv}",
     gson: "com.google.code.gson:gson:${versions.gson}",
     http: "org.apache.httpcomponents:httpclient:${versions.http}",
-    jts: "com.vividsolutions:jts-core:${versions.jts}",
+    jts: "org.locationtech.jts:jts-core:${versions.jts}",
     geotools: "org.geotools:gt-shapefile:${versions.geotools}",
     osmosis: [
         core: "org.openstreetmap.osmosis:osmosis-core:${versions.osmosis}",
