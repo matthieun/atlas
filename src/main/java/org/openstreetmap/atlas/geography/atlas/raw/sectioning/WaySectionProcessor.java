@@ -31,19 +31,20 @@ import org.openstreetmap.atlas.geography.atlas.packed.PackedAtlasBuilder;
 import org.openstreetmap.atlas.geography.atlas.pbf.AtlasLoadingOption;
 import org.openstreetmap.atlas.geography.atlas.pbf.slicing.identifier.WaySectionIdentifierFactory;
 import org.openstreetmap.atlas.geography.atlas.pbf.store.PbfOneWay;
-import org.openstreetmap.atlas.geography.atlas.raw.slicing.temporary.TemporaryEdge;
-import org.openstreetmap.atlas.geography.atlas.raw.slicing.temporary.TemporaryNode;
+import org.openstreetmap.atlas.geography.atlas.raw.temporary.TemporaryEdge;
+import org.openstreetmap.atlas.geography.atlas.raw.temporary.TemporaryNode;
 import org.openstreetmap.atlas.geography.sharding.Shard;
 import org.openstreetmap.atlas.geography.sharding.Sharding;
 import org.openstreetmap.atlas.tags.AtlasTag;
 import org.openstreetmap.atlas.tags.LayerTag;
+import org.openstreetmap.atlas.tags.SyntheticInvalidWaySectionTag;
 import org.openstreetmap.atlas.utilities.collections.Iterables;
 import org.openstreetmap.atlas.utilities.scalars.Distance;
-import org.openstreetmap.atlas.utilities.scalars.Duration;
 import org.openstreetmap.atlas.utilities.time.Time;
 import org.openstreetmap.osmosis.core.domain.v0_6.Node;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.helpers.MessageFormatter;
 
 /**
  * Way-section processor that runs on raw atlases. Its main purpose is to split raw atlas points
@@ -64,10 +65,13 @@ public class WaySectionProcessor
     private static final int MINIMUM_NUMBER_OF_SELF_INTERSECTIONS_FOR_A_NODE = 3;
     private static final int MINIMUM_SHAPE_POINTS_TO_QUALIFY_AS_AREA = 3;
     private static final int MINIMUM_POINTS_TO_QUALIFY_AS_A_LINE = 2;
+    private static final int SINGLE_SECTIONING_IDENTIFIER_REMAINING_DELTA = 998;
 
     // Logging constants
     private static final String STARTED_TASK_MESSAGE = "Started {} for Shard {}";
     private static final String COMPLETED_TASK_MESSAGE = "Finished {} for Shard {} in {}";
+    private static final String SHARD_SPECIFIC_COMPLETED_TASK_MESSAGE = "While processing shard {}, finished {} for shard {} in {}";
+    private static final String RELATION_MEMBER_EXCLUSION_MESSAGE = "Excluding {} {} from Relation {} since this member is not in the Atlas";
     private static final String WAY_SECTIONING_TASK = "Way-Sectioning";
     private static final String ATLAS_FETCHING_TASK = "Atlas-Fetching";
     private static final String SUB_ATLAS_CUTTING_TASK = "Sub-Atlas Cutting";
@@ -79,23 +83,23 @@ public class WaySectionProcessor
 
     // Expand the initial shard boundary to capture any edges that are crossing the shard boundary
     private static final Distance SHARD_EXPANSION_DISTANCE = Distance.meters(20);
+    private static final boolean USE_SUB_ATLAS = false;
 
     private final Atlas rawAtlas;
     private final AtlasLoadingOption loadingOption;
+
     private final List<Shard> loadedShards = new ArrayList<>();
 
     // Bring in all points that are part of any line that will become an edge
-    private final Predicate<AtlasEntity> pointPredicate = entity -> entity instanceof Point
-            && Iterables.stream(entity.getAtlas().linesContaining(((Point) entity).getLocation()))
-                    .anyMatch(this::isAtlasEdge);
-
-    // Bring in all lines that will become edges
-    private final Predicate<AtlasEntity> linePredicate = entity -> entity instanceof Line
-            && isAtlasEdge((Line) entity);
+    private final Predicate<AtlasEntity> pointPredicate = entity -> entity instanceof Point;
 
     // TODO - we are pulling in all edges and their contained points in the shard. We can optimize
     // this further by only considering the edges crossing the shard boundary and their intersecting
     // edges to reduce the memory overhead on each slave.
+
+    // Bring in all lines that will become edges
+    private final Predicate<AtlasEntity> linePredicate = entity -> entity instanceof Line
+            && isAtlasEdge((Line) entity);
 
     // Dynamic expansion filter will be a combination of points and lines
     private final Predicate<AtlasEntity> dynamicAtlasExpansionFilter = entity -> this.pointPredicate
@@ -175,7 +179,8 @@ public class WaySectionProcessor
         sectionEdges(changeSet);
 
         final Atlas atlas = buildSectionedAtlas(changeSet);
-        logTaskCompletionAsInfo(WAY_SECTIONING_TASK, getShardOrAtlasName(), time.elapsedSince());
+        logTaskAsInfo(COMPLETED_TASK_MESSAGE, WAY_SECTIONING_TASK, getShardOrAtlasName(),
+                time.elapsedSince());
 
         return cutSubAtlasForOriginalShard(atlas);
     }
@@ -196,6 +201,8 @@ public class WaySectionProcessor
         this.rawAtlas.pointsAt(location).forEach(point -> nodeCounter
                 .addNode(new TemporaryNode(point.getIdentifier(), point.getLocation())));
     }
+
+    // TODO add statistics
 
     /**
      * Grabs the atlas for the initial shard, in its entirety. Then proceeds to expand out to
@@ -227,7 +234,7 @@ public class WaySectionProcessor
             {
                 final Time fetchTime = Time.now();
                 final Optional<Atlas> fetchedAtlas = rawAtlasFetcher.apply(initialShard);
-                logTaskCompletionAsTrace(ATLAS_FETCHING_TASK, getShardOrAtlasName(),
+                logTaskAsTrace(COMPLETED_TASK_MESSAGE, ATLAS_FETCHING_TASK, getShardOrAtlasName(),
                         fetchTime.elapsedSince());
                 return fetchedAtlas;
             }
@@ -235,21 +242,28 @@ public class WaySectionProcessor
             {
                 final Time fetchTime = Time.now();
                 final Optional<Atlas> possibleAtlas = rawAtlasFetcher.apply(shard);
-                logTaskCompletionAsTrace(ATLAS_FETCHING_TASK, getShardOrAtlasName(),
-                        fetchTime.elapsedSince());
-
-                if (possibleAtlas.isPresent())
+                logTaskAsInfo(SHARD_SPECIFIC_COMPLETED_TASK_MESSAGE, getShardOrAtlasName(),
+                        ATLAS_FETCHING_TASK, shard.getName(), fetchTime.elapsedSince());
+                if (USE_SUB_ATLAS)
                 {
-                    this.loadedShards.add(shard);
-                    final Atlas atlas = possibleAtlas.get();
-                    final Time subAtlasTime = Time.now();
-                    final Optional<Atlas> subAtlas = atlas
-                            .subAtlas(this.dynamicAtlasExpansionFilter);
-                    logTaskCompletionAsTrace(SUB_ATLAS_CUTTING_TASK, getShardOrAtlasName(),
-                            subAtlasTime.elapsedSince());
-                    return subAtlas;
+                    if (possibleAtlas.isPresent())
+                    {
+                        this.loadedShards.add(shard);
+                        final Atlas atlas = possibleAtlas.get();
+                        final Time subAtlasTime = Time.now();
+                        final Optional<Atlas> subAtlas = atlas
+                                .subAtlas(this.dynamicAtlasExpansionFilter);
+                        logTaskAsInfo(SHARD_SPECIFIC_COMPLETED_TASK_MESSAGE, getShardOrAtlasName(),
+                                SUB_ATLAS_CUTTING_TASK, shard.getName(),
+                                subAtlasTime.elapsedSince());
+                        return subAtlas;
+                    }
+                    return Optional.empty();
                 }
-                return Optional.empty();
+                else
+                {
+                    return possibleAtlas;
+                }
             }
         };
 
@@ -262,12 +276,10 @@ public class WaySectionProcessor
         final DynamicAtlas atlas = new DynamicAtlas(policy);
         atlas.preemptiveLoad();
 
-        logTaskCompletionAsInfo(DYNAMIC_ATLAS_CREATION_TASK, getShardOrAtlasName(),
+        logTaskAsInfo(COMPLETED_TASK_MESSAGE, DYNAMIC_ATLAS_CREATION_TASK, getShardOrAtlasName(),
                 dynamicAtlasTime.elapsedSince());
         return atlas;
     }
-
-    // TODO add statistics
 
     /**
      * Final step of way-sectioning. Use the {@link WaySectionChangeSet} to build an {@link Atlas}
@@ -362,8 +374,7 @@ public class WaySectionProcessor
                         }
                         else
                         {
-                            logger.debug(
-                                    "Excluding Point {} from Relation {} since it's no longer in the Atlas",
+                            logger.debug(RELATION_MEMBER_EXCLUSION_MESSAGE, ItemType.POINT,
                                     memberIdentifier, relation.getIdentifier());
                         }
                         break;
@@ -393,13 +404,20 @@ public class WaySectionProcessor
                         }
                         else
                         {
-                            logger.debug(
-                                    "Excluding Line {} from Relation {} since it's no longer in the Atlas",
+                            logger.debug(RELATION_MEMBER_EXCLUSION_MESSAGE, ItemType.LINE,
                                     memberIdentifier, relation.getIdentifier());
                         }
                         break;
                     case RELATION:
-                        bean.addItem(memberIdentifier, memberRole, ItemType.RELATION);
+                        if (builder.peek().relation(memberIdentifier) != null)
+                        {
+                            bean.addItem(memberIdentifier, memberRole, ItemType.RELATION);
+                        }
+                        else
+                        {
+                            logger.debug(RELATION_MEMBER_EXCLUSION_MESSAGE, ItemType.RELATION,
+                                    memberIdentifier, relation.getIdentifier());
+                        }
                         break;
                     default:
                         throw new CoreException("Unsupported relation member type in Raw Atlas, {}",
@@ -419,7 +437,7 @@ public class WaySectionProcessor
             }
         });
 
-        logTaskCompletionAsInfo(SECTIONED_ATLAS_CREATION_TASK, getShardOrAtlasName(),
+        logTaskAsInfo(COMPLETED_TASK_MESSAGE, SECTIONED_ATLAS_CREATION_TASK, getShardOrAtlasName(),
                 buildTime.elapsedSince());
         return builder.get();
     }
@@ -474,6 +492,27 @@ public class WaySectionProcessor
                 this.rawAtlas.numberOfRelations());
     }
 
+    private void createEdgeFromRemainingPolyline(final Line line, final int startIndex,
+            final boolean isReversed, final boolean hasReverseEdge,
+            final WaySectionIdentifierFactory identifierFactory,
+            final List<TemporaryEdge> newEdgesForLine)
+    {
+        // If we have a single way-section identifier left to use, we're going to run out
+        // identifiers if we continue sectioning. At this point, take the rest of the
+        // un-sectioned polyline and add it as the 999th edge.
+        final PolyLine polyline = line.asPolyLine();
+        final PolyLine rawPolyLine = new PolyLine(polyline.truncate(startIndex, 0));
+        final PolyLine edgePolyLine = isReversed ? rawPolyLine.reversed() : rawPolyLine;
+        final long edgeIdentifier = identifierFactory.nextIdentifier();
+
+        // Update the tags to indicate this edge wasn't way-sectioned
+        final Map<String, String> tags = line.getTags();
+        tags.put(SyntheticInvalidWaySectionTag.KEY, SyntheticInvalidWaySectionTag.YES.toString());
+
+        // Add the edge
+        newEdgesForLine.add(new TemporaryEdge(edgeIdentifier, edgePolyLine, tags, hasReverseEdge));
+    }
+
     /**
      * Up to this point, we've constructed the {@link DynamicAtlas} and way-sectioned it. Since
      * we're only responsible for returning an Atlas for the provided shard, we now need to cut a
@@ -489,22 +528,23 @@ public class WaySectionProcessor
     {
         try
         {
-            if (this.loadedShards.size() > 1)
+            if (!this.loadedShards.isEmpty())
             {
                 // The first shard is always the initial one. Use its bounds to build the atlas.
                 final Rectangle originalShardBounds = this.loadedShards.get(0).bounds();
-                return atlas.subAtlas(originalShardBounds).get();
+                return atlas.subAtlas(originalShardBounds)
+                        .orElseThrow(() -> new CoreException(
+                                "Cannot have an empty atlas after way sectioning {}",
+                                this.loadedShards.get(0).getName()));
             }
             else
             {
-                // We don't need to cut anything away, since no other shards were loaded
                 return atlas;
             }
         }
         catch (final Exception e)
         {
-            logger.error("Error creating sub-atlas for original shard bounds", e);
-            return null;
+            throw new CoreException("Error creating sub-atlas for original shard bounds", e);
         }
     }
 
@@ -522,7 +562,7 @@ public class WaySectionProcessor
         final Time time = logTaskStartedAsInfo(SHAPE_POINT_DETECTION_TASK, getShardOrAtlasName());
         StreamSupport.stream(this.rawAtlas.points().spliterator(), true)
                 .filter(point -> isAtlasPoint(changeSet, point)).forEach(changeSet::recordPoint);
-        logTaskCompletionAsInfo(SHAPE_POINT_DETECTION_TASK, getShardOrAtlasName(),
+        logTaskAsInfo(COMPLETED_TASK_MESSAGE, SHAPE_POINT_DETECTION_TASK, getShardOrAtlasName(),
                 time.elapsedSince());
     }
 
@@ -573,7 +613,9 @@ public class WaySectionProcessor
 
                 // Identify all nodes. We care about three cases: 1. self-intersections, if the way
                 // contains a repeated location 2. sectioning based on tagging (ex. at a barrier) 3.
-                // at an intersection with another edge
+                // at an intersection with another edge. Case 3 breaks down into pieces: a. An
+                // intersection with another edge of the same layer. b. An intersection at the start
+                // or end of an edge of a different layer
                 for (int index = 0; index < polyLine.size(); index++)
                 {
                     final Location shapePoint = polyLine.get(index);
@@ -592,8 +634,15 @@ public class WaySectionProcessor
                         continue;
                     }
 
-                    // 3. Check if there is an edge intersection of the same layer at this location
+                    // 3a. Check for an intersecting edge, of the same layer at this location
                     if (locationIsPartOfAnIntersectingEdgeOfTheSameLayer(shapePoint, line))
+                    {
+                        addPointToNodeList(shapePoint, nodesForEdge);
+                    }
+
+                    // 3b. Check for an intersecting edge, of a different layer at this location -
+                    // the intersecting edge must start or end here
+                    if (locationIsAnEndPointOfAnIntersectingEdgeOfDifferentLayer(shapePoint, line))
                     {
                         addPointToNodeList(shapePoint, nodesForEdge);
                     }
@@ -636,7 +685,7 @@ public class WaySectionProcessor
             }
         });
 
-        logTaskCompletionAsInfo(ATLAS_FEATURE_DETECTION_TASK, getShardOrAtlasName(),
+        logTaskAsInfo(COMPLETED_TASK_MESSAGE, ATLAS_FEATURE_DETECTION_TASK, getShardOrAtlasName(),
                 time.elapsedSince());
     }
 
@@ -716,9 +765,16 @@ public class WaySectionProcessor
     private boolean isAtlasPoint(final WaySectionChangeSet changeSet, final Point point)
     {
         final boolean hasExplicitOsmTags = pointHasExplicitOsmTags(point);
+
+        // We use the presence of explicit OSM tagging to determine if it's a point
+        if (hasExplicitOsmTags)
+        {
+            return true;
+        }
+
         final boolean isRelationMember = !point.relations().isEmpty();
 
-        if (isRelationMember && !hasExplicitOsmTags && !isAtlasNode(changeSet, point))
+        if (isRelationMember && !isAtlasNode(changeSet, point))
         {
             // When the OSM node is part of a relation, doesn't have explicit OSM tagging and is not
             // at an intersection (not an atlas node), then we want to create an atlas point so we
@@ -728,7 +784,7 @@ public class WaySectionProcessor
 
         final boolean isIsolatedNode = Iterables
                 .isEmpty(this.rawAtlas.linesContaining(point.getLocation()));
-        if (!isRelationMember && !hasExplicitOsmTags && isIsolatedNode)
+        if (!isRelationMember && isIsolatedNode)
         {
             // This is a special case - when an OSM node is not part of a relation, doesn't have
             // explicit OSM tagging and is not a part of an OSM way, then we want to bring it in as
@@ -736,8 +792,43 @@ public class WaySectionProcessor
             return true;
         }
 
-        // All other times, we use the presence of explicit OSM tagging to determine if it's a point
-        return hasExplicitOsmTags;
+        return false;
+    }
+
+    /**
+     * Determines whether the given {@link Line} has any intersecting {@link Line}s, with a
+     * different layer tag value that meet the definition of an {@link Edge}, starting or ending at
+     * the given {@link Location}.
+     *
+     * @param location
+     *            The {@link Location} to use
+     * @param line
+     *            The {@link Line} to use
+     * @return {@code true} if there is at least one {@link Edge} with a different layer tag value
+     *         intersecting the given line and having an end point at the given location
+     */
+    private boolean locationIsAnEndPointOfAnIntersectingEdgeOfDifferentLayer(
+            final Location location, final Line line)
+    {
+        final long targetLayerValue = LayerTag.getTaggedOrImpliedValue(line, 0L);
+
+        return Iterables
+                // Find all intersecting edges
+                .stream(this.rawAtlas.linesContaining(location,
+                        target -> target.getIdentifier() != line.getIdentifier()
+                                && isAtlasEdge(target) && target.asPolyLine().contains(location)))
+                // Check whether that edge has a different layer value as the line we're looking at
+                // and that our point is its start or end node
+                .anyMatch(candidate ->
+                {
+                    final long layerValue = LayerTag.getTaggedOrImpliedValue(candidate, 0L);
+                    final boolean edgesOnDifferentLayers = targetLayerValue != layerValue;
+                    final PolyLine candidatePolyline = candidate.asPolyLine();
+                    final boolean intersectionIsAtEndPoint = candidatePolyline.first()
+                            .equals(location) || candidatePolyline.last().equals(location);
+
+                    return edgesOnDifferentLayers && intersectionIsAtEndPoint;
+                });
     }
 
     /**
@@ -757,8 +848,6 @@ public class WaySectionProcessor
     {
         final long targetLayerValue = LayerTag.getTaggedOrImpliedValue(line, 0L);
 
-        // TODO - Getting non-intersecting lines from the spatial query results.
-        // So explicitly specifying "contains shapePoint". Need to resolve this!
         return Iterables
                 // Find all intersecting edges
                 .stream(this.rawAtlas.linesContaining(location,
@@ -772,16 +861,14 @@ public class WaySectionProcessor
                 });
     }
 
-    private void logTaskCompletionAsInfo(final String taskName, final String shardName,
-            final Duration duration)
+    private void logTaskAsInfo(final String message, final Object... arguments)
     {
-        logger.info(COMPLETED_TASK_MESSAGE, taskName, shardName, duration);
+        logger.info(MessageFormatter.arrayFormat(message, arguments).getMessage());
     }
 
-    private void logTaskCompletionAsTrace(final String taskName, final String shardName,
-            final Duration duration)
+    private void logTaskAsTrace(final String message, final Object... arguments)
     {
-        logger.trace(COMPLETED_TASK_MESSAGE, taskName, shardName, duration);
+        logger.trace(MessageFormatter.arrayFormat(message, arguments).getMessage());
     }
 
     private Time logTaskStartedAsInfo(final String taskname, final String shardName)
@@ -877,7 +964,7 @@ public class WaySectionProcessor
             changeSet.createLineToEdgeMapping(line, edges);
         });
 
-        logTaskCompletionAsInfo(EDGE_SECTIONING_TASK, getShardOrAtlasName(),
+        logTaskAsInfo(COMPLETED_TASK_MESSAGE, EDGE_SECTIONING_TASK, getShardOrAtlasName(),
                 sectionTime.elapsedSince());
     }
 
@@ -956,6 +1043,15 @@ public class WaySectionProcessor
             // We've already processed the starting node, so start with the first index
             for (int index = 1; index < polyline.size(); index++)
             {
+                // Handle the case of exceeding the sectioning limit
+                if (identifierFactory.getDelta() == SINGLE_SECTIONING_IDENTIFIER_REMAINING_DELTA)
+                {
+                    // Add the remaining polyline as an edge and stop sectioning
+                    createEdgeFromRemainingPolyline(line, startIndex, isReversed, hasReverseEdge,
+                            identifierFactory, newEdgesForLine);
+                    break;
+                }
+
                 // Check to see if this location is a node
                 endNode = nodesToSectionAt.getNode(polyline.get(index));
                 if (endNode.isPresent())
@@ -974,23 +1070,16 @@ public class WaySectionProcessor
                         continue;
                     }
 
-                    // Update end point occurrence to factor in duplicates
-                    final Integer duplicates = duplicateLocations.get(end.getIdentifier());
-                    if (duplicates != null)
-                    {
-                        for (int duplicate = 0; duplicate < duplicates; duplicate++)
-                        {
-                            nodesToSectionAt.incrementOccurrence(end);
-                        }
-                    }
-
                     // We found the end node, create the edge. Note: using occurrence minus one
                     // since PolyLine uses zero-based numbering. We are incrementing only the
                     // start node occurrence, since the end node will either be used as a future
                     // start node or be the end of the way, in which case we don't care.
                     final int startOccurrence = nodesToSectionAt.getOccurrence(startNode.get()) - 1;
                     nodesToSectionAt.incrementOccurrence(startNode.get());
-                    final int endOccurrence = nodesToSectionAt.getOccurrence(end) - 1;
+
+                    // Update end point occurrence to factor in any duplicates in the polyline
+                    final int endOccurrence = duplicateLocations.getOrDefault(end.getIdentifier(),
+                            0) + nodesToSectionAt.getOccurrence(end) - 1;
 
                     // Build the underlying polyline and reverse it, if necessary
                     final PolyLine rawPolyline = polyline.between(polyline.get(startIndex),
@@ -1034,7 +1123,7 @@ public class WaySectionProcessor
      * iterating through all the line shape points, trying to match each one to a
      * {@link TemporaryNode} for this {@link Line}. If we find a match, then we create a
      * corresponding {@link TemporaryEdge}, making sure to reverse the polyline if the original line
-     * was reversed and to note whether we need to create a corresponding reverse edge. This main
+     * was reversed and to note whether we need to create a corresponding reverse edge. The main
      * difference between this and the non-ring split method is that this one looks specifically for
      * rings and avoid splitting at the first polyline location, since it is not guaranteed to be a
      * node.
@@ -1102,6 +1191,16 @@ public class WaySectionProcessor
                         duplicateLocations.put(currentLocation, duplicateCount + 1);
                     }
 
+                    // Handle the case of exceeding the sectioning limit
+                    if (identifierFactory
+                            .getDelta() == SINGLE_SECTIONING_IDENTIFIER_REMAINING_DELTA)
+                    {
+                        // Add the remaining polyline as an edge and stop sectioning
+                        createEdgeFromRemainingPolyline(line, startIndex, isReversed,
+                                hasReverseEdge, identifierFactory, newEdgesForLine);
+                        break;
+                    }
+
                     // Check to see if this location is a node
                     if (endNode.isPresent())
                     {
@@ -1121,30 +1220,27 @@ public class WaySectionProcessor
                                 continue;
                             }
 
-                            // Update end point occurrence to factor in duplicates
-                            final Integer duplicates = duplicateLocations.get(currentLocation);
-                            if (duplicates != null)
-                            {
-                                for (int duplicate = 0; duplicate < duplicates; duplicate++)
-                                {
-                                    nodesToSectionAt.incrementOccurrence(end);
-                                }
-                            }
+                            // Handle start occurrence
+                            final int startOccurrence = nodesToSectionAt
+                                    .getOccurrence(startNode.get()) - 1;
+                            nodesToSectionAt.incrementOccurrence(startNode.get());
+
+                            // Update end point occurrence to factor in any duplicates in the
+                            // polyline
+                            final int endOccurrence = duplicateLocations
+                                    .getOrDefault(currentLocation, 0)
+                                    + nodesToSectionAt.getOccurrence(end) - 1;
 
                             // We only want to create an edge if we've started from a node. If we've
                             // started from a shape point, we've just encountered our first node.
                             final PolyLine rawPolyline = polyline.between(polyline.get(startIndex),
-                                    nodesToSectionAt.getOccurrence(startNode.get()) - 1,
-                                    polyline.get(index), nodesToSectionAt.getOccurrence(end) - 1);
+                                    startOccurrence, polyline.get(index), endOccurrence);
                             final PolyLine edgePolyline = isReversed ? rawPolyline.reversed()
                                     : rawPolyline;
 
                             newEdgesForLine
                                     .add(new TemporaryEdge(identifierFactory.nextIdentifier(),
                                             edgePolyline, line.getTags(), hasReverseEdge));
-
-                            // Increment start node occurrence
-                            nodesToSectionAt.incrementOccurrence(startNode.get());
                         }
 
                         // Update starting points
@@ -1176,12 +1272,12 @@ public class WaySectionProcessor
                         }
 
                         // Get the raw polyline from the last node to the last(first) location
-                        final int endOccurence = duplicateLocations.containsKey(currentLocation)
+                        final int endOccurrence = duplicateLocations.containsKey(currentLocation)
                                 ? duplicateLocations.get(currentLocation) : 1;
                         final PolyLine rawPolylineFromLastNodeToLastLocation = polyline.between(
                                 polyline.get(startIndex),
                                 nodesToSectionAt.getOccurrence(startNode.get()) - 1,
-                                currentLocation, endOccurence);
+                                currentLocation, endOccurrence);
 
                         final PolyLine edgePolyLine;
                         if (isReversed)

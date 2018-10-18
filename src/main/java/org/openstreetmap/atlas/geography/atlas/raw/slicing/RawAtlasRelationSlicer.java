@@ -29,11 +29,11 @@ import org.openstreetmap.atlas.geography.atlas.raw.slicing.changeset.ChangeSetHa
 import org.openstreetmap.atlas.geography.atlas.raw.slicing.changeset.RelationChangeSet;
 import org.openstreetmap.atlas.geography.atlas.raw.slicing.changeset.RelationChangeSetHandler;
 import org.openstreetmap.atlas.geography.atlas.raw.slicing.changeset.SimpleChangeSet;
-import org.openstreetmap.atlas.geography.atlas.raw.slicing.temporary.TemporaryEntity;
-import org.openstreetmap.atlas.geography.atlas.raw.slicing.temporary.TemporaryLine;
-import org.openstreetmap.atlas.geography.atlas.raw.slicing.temporary.TemporaryPoint;
-import org.openstreetmap.atlas.geography.atlas.raw.slicing.temporary.TemporaryRelation;
-import org.openstreetmap.atlas.geography.atlas.raw.slicing.temporary.TemporaryRelationMember;
+import org.openstreetmap.atlas.geography.atlas.raw.temporary.TemporaryEntity;
+import org.openstreetmap.atlas.geography.atlas.raw.temporary.TemporaryLine;
+import org.openstreetmap.atlas.geography.atlas.raw.temporary.TemporaryPoint;
+import org.openstreetmap.atlas.geography.atlas.raw.temporary.TemporaryRelation;
+import org.openstreetmap.atlas.geography.atlas.raw.temporary.TemporaryRelationMember;
 import org.openstreetmap.atlas.geography.boundary.CountryBoundaryMap;
 import org.openstreetmap.atlas.geography.converters.jts.JtsUtility;
 import org.openstreetmap.atlas.tags.ISOCountryTag;
@@ -696,9 +696,23 @@ public class RawAtlasRelationSlicer extends RawAtlasSlicer
                         markRemovedMemberLineForDeletion(inner, relationIdentifier);
                     }
 
-                    // Set the proper country code
+                    // Get the proper country code
+                    final String countryCode;
+                    final Optional<String> possibleCountryCode = outer.getTag(ISOCountryTag.KEY);
+                    if (possibleCountryCode.isPresent())
+                    {
+                        countryCode = possibleCountryCode.get();
+                    }
+                    else
+                    {
+                        // At this point, all members are sliced and must have a country code
+                        throw new CoreException(
+                                "Relation {} contains member {} that is missing a country code",
+                                relationIdentifier, outer);
+                    }
+
                     CountryBoundaryMap.setGeometryProperty(exteriorRing, ISOCountryTag.KEY,
-                            ISOCountryTag.first(outer).get().getIso3CountryCode());
+                            countryCode);
 
                     // Create points, lines and update members
                     createNewLineMemberForRelation(exteriorRing, relationIdentifier,
