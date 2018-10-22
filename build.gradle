@@ -9,6 +9,8 @@ plugins {
 	id 'org.sonarqube' version '2.6'
 	id 'com.google.protobuf' version '0.8.1'
 	id "io.codearte.nexus-staging" version "0.8.0"
+	//id 'com.zyxist.chainsaw' version '0.3.1'
+	id "rgoldberg.experimental-jigsaw" version "0.4-SNAPSHOT"
 }
 
 apply from: 'dependencies.gradle'
@@ -29,15 +31,15 @@ repositories
     mavenCentral()
 }
 
-compileJava {
-    inputs.property("moduleName", moduleName)
-    doFirst {
-        options.compilerArgs = [
-            '--module-path', classpath.asPath,
-        ]
-        classpath = files()
-    }
-}
+// compileJava {
+//     inputs.property("moduleName", moduleName)
+//     doFirst {
+//         options.compilerArgs = [
+//             '--module-path', classpath.asPath,
+//         ]
+//         classpath = files()
+//     }
+// }
 
 configurations
 {

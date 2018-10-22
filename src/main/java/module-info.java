@@ -1,7 +1,13 @@
 module org.openstreetmap.atlas
 {
+    exports org.openstreetmap.atlas.exception;
     exports org.openstreetmap.atlas.geography;
     exports org.openstreetmap.atlas.geography.atlas;
+    exports org.openstreetmap.atlas.locale;
+    exports org.openstreetmap.atlas.proto;
+    exports org.openstreetmap.atlas.streaming;
+    exports org.openstreetmap.atlas.tags;
+    exports org.openstreetmap.atlas.utilities.archive;
 
     // Default modules
     requires java.desktop;
