@@ -13,7 +13,7 @@ protobuf {
     generatedFilesBaseDir = 'src/generated/'
 
     protoc {
-        artifact = "${packages.protoc}"
+        artifact = "${packages.protobuf.protoc}"
     }
 
     generateProtoTasks {

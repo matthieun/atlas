@@ -14,9 +14,9 @@ public enum Dimensions
 
     THREE_DIMENSIONAL(3, Bbox3D.class);
 
-    private int numberOfDimensions;
+    private final int numberOfDimensions;
 
-    private Class<? extends Bbox> bboxClass;
+    private final Class<? extends Bbox> bboxClass;
 
     public static Bbox toBbox(final Double... coordinates)
     {
@@ -32,7 +32,8 @@ public enum Dimensions
 
         try
         {
-            return ConstructorUtils.invokeConstructor(dimensions.getBboxClass(), coordinates);
+            return ConstructorUtils.invokeConstructor(dimensions.getBboxClass(),
+                    (Object) coordinates);
         }
         catch (final Exception e)
         {

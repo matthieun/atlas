@@ -7,7 +7,7 @@ import java.util.NoSuchElementException;
 import org.openstreetmap.atlas.exception.CoreException;
 import org.openstreetmap.atlas.utilities.collections.StringList;
 
-import au.com.bytecode.opencsv.CSVParser;
+import com.opencsv.CSVParser;
 
 /**
  * A Csv line
