@@ -105,7 +105,7 @@ public class OsmosisXmlReaderFromResource implements RunnableSource
         }
         finally
         {
-            this.sink.release();
+            this.sink.close();
             if (inputStream != null)
             {
                 try

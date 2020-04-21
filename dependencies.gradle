@@ -11,7 +11,7 @@ project.ext.versions = [
     jtslab: '1.16.1.1',
     spatial4j: '0.7',
     geotools: '20.2',
-    osmosis: '0.44.1',
+    osmosis: '0.47.3',
     commons_io: '2.6',
     commons_cli: '1.4',
     commons_csv: '1.8',

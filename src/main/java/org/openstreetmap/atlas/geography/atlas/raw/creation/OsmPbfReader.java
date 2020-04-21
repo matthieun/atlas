@@ -118,6 +118,16 @@ public class OsmPbfReader implements Sink
     }
 
     @Override
+    public void close()
+    {
+        // We've processed all Nodes, Ways and shallow Relations to this point. Now, we need to
+        // handle Relations that contain Relation members properly.
+        processStagedRelations();
+        this.statistics.summary();
+        logger.info("Released OSM PBF Reader");
+    }
+
+    @Override
     public void complete()
     {
         // No-op
@@ -162,16 +172,6 @@ public class OsmPbfReader implements Sink
             logger.trace("Filtering out OSM {} {} from Raw Atlas", rawEntity.getType(),
                     rawEntity.getId());
         }
-    }
-
-    @Override
-    public void release()
-    {
-        // We've processed all Nodes, Ways and shallow Relations to this point. Now, we need to
-        // handle Relations that contain Relation members properly.
-        processStagedRelations();
-        this.statistics.summary();
-        logger.info("Released OSM PBF Reader");
     }
 
     /**
