@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
 
 GITHUB_REPO="osmlab/atlas"
-MERGE_BRANCH=main
-SOURCE_BRANCH=dev
+MERGE_BRANCH=actions-test
+SOURCE_BRANCH=actions-test-dev
 
 FUNCTION_NAME="merge-$SOURCE_BRANCH-to-$MERGE_BRANCH"
 CURRENT_BRANCH=$(echo $GITHUB_REF | awk 'BEGIN { FS = "/" } ; { print $3 }')
