@@ -51,7 +51,7 @@ jobs:
 # Merge to Main
     - name: Merge dev to main
       env:
-        MERGE_TAG_MERGE_TAG_GITHUB_SECRET_TOKEN: ${{ secrets.MERGE_TAG_GITHUB_SECRET_TOKEN }}
+        MERGE_TAG_GITHUB_SECRET_TOKEN: ${{ secrets.MERGE_TAG_GITHUB_SECRET_TOKEN }}
       run: .github/workflow_scripts/merge-dev-to-main.sh
 
 # Sign and Publish
