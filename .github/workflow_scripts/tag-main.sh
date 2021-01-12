@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 
-GITHUB_REPO="osmlab/atlas"
-RELEASE_BRANCH=main
+GITHUB_REPO="matthieun/atlas"
+RELEASE_BRANCH=actions-test
 
 FUNCTION_NAME="tag-$RELEASE_BRANCH"
 CURRENT_BRANCH=$(echo $GITHUB_REF | awk 'BEGIN { FS = "/" } ; { print $3 }')

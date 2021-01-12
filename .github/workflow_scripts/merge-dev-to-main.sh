@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 
-GITHUB_REPO="osmlab/atlas"
+GITHUB_REPO="matthieun/atlas"
 MERGE_BRANCH=actions-test
 SOURCE_BRANCH=actions-test-dev
 
